@@ -44,6 +44,23 @@ Structure of a Service Endpoint:
 • Surveyor Integrity: Coordinate updates can be gated by requiring a signature from a recognized Surveyor DID, preventing user-input errors.
 
 
+## 6. Privacy Considerations
+
+### 6.1 PII on Public Ledgers
+The `did:drop` method stores data on the Algorand public blockchain. As such, no Personally Identifiable Information (PII) should be stored in the DID Document or the associated smart contract state.
+
+* **Coordinates:** GPS coordinates are considered public infrastructure data (landing pads) and not private user data. Users should not register coordinates for sensitive locations (e.g., "Bedroom Window") that they do not wish to be publicly resolvable.
+* **Labels:** Users are advised to use generic labels (e.g., "Drop Point A") rather than personal ones (e.g., "John's House") to minimize correlation risks.
+
+### 6.2 Correlation Risks
+Since `did:drop` is often paired with FIO handles, an observer could correlate a wallet address with a specific landing pad location. Users should be aware that the link between their FIO handle and their `did:drop` identifier is publicly visible on-chain.
+
+
+
+
+
+
+
 
 
 
