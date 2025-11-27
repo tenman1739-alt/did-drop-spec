@@ -1,139 +1,96 @@
-# 🛰️ **did-drop-spec**  
-### **did:drop v1.2 (Final)**  
+# 🛰️ **did-drop-spec**
+### **did:drop v2.0 (Mission Plan Architecture)**
+
 
 ---
 
-## **1. Abstract (Updated)**  
-> The did:drop method is a Decentralized Identifier method designed for autonomous drone delivery and geospatial logistics.  
-> It binds a digital identity to a high-availability, encrypted array of physical coordinates (Landing Options) and access metadata.  
-> It utilizes the **Algorand blockchain** for high-speed, low-cost Encrypted State Management and is designed to interface with a **Human-Readable Alias Layer (HRAL)** for quick, human-friendly lookup, acting as a decentralized DNS service for landing spots.  
->  
-> **Access to the coordinates requires an explicit, cryptographic Mission Authorization Token from the controller.**
 
----
+1. Abstract (Revised)
+The did:drop method is a Decentralized Identifier method designed for verifiable, autonomous drone delivery and geospatial logistics.
+It binds a digital identifier (did:drop:<AppID>:<MissionID>) to a pointer—a Content Identifier (CID)—which references a W3C DID Document stored on a decentralized storage network (IPFS/Arweave). This off-chain DID Document, referred to as the Mission Plan, contains the actual flight and landing coordinates.
+It utilizes the Algorand blockchain for high-speed, low-cost verifiable state management of these CIDs. This structure establishes a verifiable link between an on-chain ledger record and a standardized, off-chain data payload.
+Access to the actionable coordinates requires an authorized party to resolve the DID and cryptographically verify the integrity of the fetched Mission Plan.
+2. The DID Format (Mission Plan Identifier)
+The DID format specifies a unique mission plan tied to a specific controller's application registry.
+did-drop = “did:drop:” app-id “:” mission-id
+did: Required URI scheme identifier.
+drop: The method name.
+app-id: The Algorand Application ID of the controller's Mission Plan Registry smart contract.
+mission-id: A unique, application-specific identifier (e.g., a hash or UUID) used as the Box key to retrieve the CID pointer on Algorand.
+Example: did:drop:4839201:ORDER-9876-ALPHA
+3. Operations
+3.1 Create (DID Document Registration)
+The controller generates the Mission Plan DID Document (W3C standard JSON format) containing the plaintext landing coordinates within the required missionEndpoint property.
+The controller cryptographically signs the complete DID Document using their private key.
+The controller uploads the signed DID Document to a decentralized storage network (e.g., IPFS/Arweave). This yields the Content Identifier (CID).
+The controller sends an ApplicationCall transaction to their Mission Plan Registry (AppID) on Algorand to store the following data in Box Storage, using the mission-id as the Box key:
+The calculated CID of the off-chain document.
+Metadata (e.g., creation timestamp, controller address).
+HRAL Registration (Optional): The controller may register a Human-Readable Alias (e.g., backyard@alias) with the HRAL, mapping it to the full did:drop:4839201:ORDER-9876-ALPHA.
+3.2 Read (Resolve)
+To resolve a Mission Plan DID and retrieve actionable coordinates:
+Parse DID: Extract the AppID and MissionID from the did:drop string.
+On-Chain Lookup: Query the Algorand Indexer for the corresponding Box in the AppID's Box Storage using the MissionID as the key.
+Retrieve Pointer: Read the Box content to retrieve the Mission Plan CID.
+Off-Chain Fetch: Use the retrieved CID to fetch the complete Mission Plan DID Document (JSON) from IPFS/Arweave.
+Verification: Verify the document's signature against the controller's public key (found in the DID Document's verificationMethod or controller state).
+Extraction: Extract the plaintext coordinates and mission parameters from the DID Document's missionEndpoint property.
+Note: The resolver receives the complete, verifiable Mission Plan Document which contains the usable coordinates.
+3.3 Update
+The update operation changes the CID pointer on-chain, effectively revoking the previous Mission Plan and replacing it with a new one.
+The controller generates a new Mission Plan DID Document with updated coordinates or parameters.
+The new document is signed and uploaded to decentralized storage, yielding a new CID-2.
+The controller sends an ApplicationCall transaction to the Mission Plan Registry to overwrite the Box corresponding to the original MissionID with CID-2.
+HRAL (Optional): Update alias mappings if the DID itself has changed (e.g., pointing an alias to a new AppID).
+3.4 Deactivate
+The controller sends a DeleteApplication transaction to destroy the Mission Plan Registry smart contract. Alternatively, the controller sends an ApplicationCall to the Registry to explicitly delete the Box associated with the MissionID, removing the CID pointer.
+4. Data Model: On-Chain and Off-Chain Components
+The data model is split to leverage the strengths of the ledger (trust anchor) and decentralized storage (data availability).
+4.1 On-Chain Data (The Trust Anchor)
+Storage Location: Algorand Box Storage of the AppID.
+Box Key: The MissionID (a byte array).
+Box Content: A minimal structure containing:
+missionCID (String/Byte Array): The Content Identifier (CID) pointing to the off-chain Mission Plan DID Document.
+controllerAddress (Address): The Algorand address of the controller who registered the mission.
+4.2 Off-Chain DID Document (The Mission Plan Payload)
+Storage Location: IPFS or Arweave.
+Format: W3C DID Document (JSON-LD).
+Mandatory Custom Property: missionEndpoint (Object): Contains the actionable delivery data.
+Property
+Type
+Description
+id
+DID
+The full did:drop:<AppID>:<MissionID> being resolved.
+controller
+DID
+The identity of the party that signed/created the document.
+verificationMethod
+Array
+Key material used for cryptographic proof.
+missionEndpoint
+Object
+The core payload. Must contain the delivery coordinates and mission parameters in plaintext.
 
-## **2. The DID Format**
-did-drop = “did:drop:” network “:” app-id
-network  = “mainnet” / “testnet” / “betanet”
-app-id   = 1*DIGIT
-
-**Example:**
-did:drop:mainnet:4839201
-
----
-
-## **3. Operations**
-
----
-
-### **3.1 Create**
-
-1. The controller generates an Algorand account (the Master Key).  
-2. The controller deploys the DROP-Smart-Contract to the Algorand blockchain. The resulting AppID becomes the suffix of the DID.  
-3. The controller uses their App to encrypt the array of Landing Options (using a unique AES-256 key stored securely in the App's Secure Enclave).  
-4. The controller sends an ApplicationCall transaction to store the Encrypted Data Blob in Algorand Box Storage.  
-5. **HRAL Registration:** The controller registers a Human-Readable Alias (e.g., `warehouse@alias`) with the HRAL, mapping it to `did:drop:mainnet:4839201`.  
-
----
-
-### **3.2 Read (Resolve)**
-
-To resolve a Landing Pad:
-
-1. **HRAL Lookup:** Retrieve the DID via alias.  
-2. **DID Resolution:** Query the Algorand Indexer for the AppID.  
-3. Read Global State for controller keys and communication endpoints (`serviceEndpoint`).  
-4. Read Box Storage to retrieve the Encrypted Data Blob.  
-5. Construct a standardized DID Document containing encrypted coordinates and communication endpoints.  
-
-⚠️ **Resolvers do NOT receive usable coordinates — only encrypted payloads requiring off-chain keys.**
-
----
-
-### **3.3 Update**
-
-1. **Landing Options:**  
-   - Decrypt existing Box data  
-   - Modify plaintext array  
-   - Re-encrypt with original AES-256 key  
-   - Overwrite Box Storage  
-
-2. **HRAL:**  
-   - Update alias mappings (e.g., point `warehouse@alias` to a new DID).  
-
----
-
-### **3.4 Deactivate**
-
-The controller sends a `DeleteApplication` transaction, removing DID storage and revoking the identifier.
-
----
-
-## **4. Data Model: Landing Options Array (Mandatory Encryption)**
-
-### **4.1 Public On-Chain Data (Encrypted)**
-
-- **Storage Location:** Algorand Box Storage  
-- **Format:** JSON object containing:  
-  - `Ciphertext` — AES-256-GCM encrypted data  
-  - `IV` — Initialization Vector  
-  - `Tag` — Authentication Tag  
-  - `ControllerSignature` — Signed integrity proof  
-
----
-
-### **4.2 Private Decrypted Schema (Landing Options Array)**  
-Accessible **only** after authorization and decryption.
-
----
-
-## **5. Mandatory Authorization Protocol: Key Exchange**
-
-> This protocol enforces **explicit user confirmation** before any coordinates are revealed.
-
----
-
-### **5.1 Cryptography Standards**
-
-- **Key Agreement:** X25519 ECDH  
-- **Content Encryption:** AES-256-GCM  
-
----
-
-### **5.2 Handshake Enforcement**
-
-The AES-256 Decryption Key is **never stored on-chain**.
-
-**Authorization Token Flow:**
-
-1. Dispatcher sends mission request to user's `serviceEndpoint`.  
-2. User's App generates shared secret via X25519.  
-3. App encrypts AES-256 Decryption Key using shared secret.  
-4. Encrypted key is returned as Mission Authorization Token.  
-5. Dispatcher decrypts Box Data → obtains coordinates → launches mission.  
-
-**Mandatory Confirmation:**  
-- Human-tap approval for non-trusted parties.  
-- Optional auto-approval for trusted parties.
-
----
-
-## **6. Security & Privacy Considerations**
-
----
-
-### **6.1 PII on Public Ledgers**
-
-All Landing Options (including StreetAddress + Shape geometry) are always:  
-- **AES-256-GCM encrypted**,  
-- **Stored in Box Storage**,  
-- **Decryption key remains off-chain & user-controlled.**
-
----
-
-### **6.2 Correlation Risks (Updated)**
-
-- The DID and HRAL alias mappings are **public**.  
-- Coordinates remain **undiscoverable** without a valid Mission Authorization Token.  
-
----
+5. Mandatory Authorization Protocol: Mission Authorization Token (MAT)
+This protocol enforces cryptographic proof that the resolving party is authorized to consume the specific Mission Plan data.
+5.1 Cryptography Standards
+Signature Algorithm: Ed25519 (for signing the Mission Plan Document).
+Authorization Proof: Algorand Transaction Signature (for the MAT).
+5.2 Authorization Flow
+The Mission Authorization Token (MAT) is a time-bound cryptographic proof from the consuming party (e.g., the UAV or Dispatcher) proving it has permission to use the coordinates.
+Resolver (UAV/Store): Attempts to resolve did:drop:<AppID>:<MissionID> (Steps 1-4 of Read).
+Document Verification: The Resolver verifies the authenticity of the fetched Mission Plan DID Document using the controller's public key specified in the document.
+MAT Generation: To confirm explicit access permission, the Resolver must generate a zero-value Algorand transaction (or a unique logic signature) and sign it, using the did:drop as the note field, creating the MAT.
+Proof of Consumption: The Resolver attaches this MAT to its internal log when executing the mission, proving it was authorized by the Mission Plan Registry.
+Mandatory Security: The coordinates are actionable (plaintext) within the DID Document, so the integrity check (Step 5 of Read) and the MAT proof are the sole gates for ensuring proper usage.
+6. Security & Privacy Considerations
+6.1 PII on Public Ledgers
+All sensitive data (landing coordinates) are NOT stored on the Algorand ledger. The ledger only holds the unencrypted pointer (CID) to the off-chain data. The coordinates are therefore only discoverable by those who:
+Know the did:drop identifier.
+Can access the decentralized storage network (IPFS/Arweave).
+Are authorized to use the data (via the MAT Protocol).
+6.2 Correlation Risks (Revised)
+The DID (did:drop:<AppID>:<MissionID>) and HRAL alias mappings are public.
+The CID (the pointer) is publicly stored on the Algorand ledger, but is non-PII.
+The coordinates remain secure because their usage is strictly tied to the cryptographic integrity verification of the Mission Plan DID Document and the Mission Authorization Token before a mission is launched.
