@@ -120,21 +120,45 @@ This protocol enforces cryptographic proof that the resolving party is authorize
 - **Mandatory Security:** The coordinates are actionable (plaintext) within the DID Document, so the integrity check (Step 5 of Read) and the MAT proof are the sole gates for ensuring proper usage.
 
 ---
+## 6. Security Considerations
 
-## 6. Security & Privacy Considerations
+### 6.1 Key Management and Custody
+The security of the did:drop method relies heavily on the proper management of cryptographic keys. Two distinct categories of keys are utilized in this specification:
 
-### 6.1 PII on Public Ledgers
+### 1. Algorand Transaction Keys (Network Layer):
+• Usage: Required to Write (create, update, delete) the DID Box record on the Algorand blockchain.
+• Risk: Compromise of this private key allows an attacker to change the CID pointer, effectively hijacking the DID to point to a malicious Mission Plan.
+• Mitigation: Controllers should utilize hardware wallets or secure key management services (KMS) for the Algorand account that controls the AppID registry.
 
-- All sensitive data (landing coordinates) are **NOT** stored on the Algorand ledger. The ledger only holds the unencrypted pointer (CID) to the off-chain data.
-- The coordinates are therefore only discoverable to those who:
-    - Know the `did:drop` identifier.
-    - Can access the decentralized storage network (IPFS/Arweave).
-    - Are authorized to use the data (via the MAT Protocol).
+### 2. DID Document Signing Keys (Application Layer):
+• Usage: Required to Sign the off-chain JSON-LD document. This key pair ensures the integrity of the landing coordinates.
+• Relationship: While the Controller's Algorand address may serve as the verification method, the spec allows for key rotation where the signing key differs from the ledger update key.
+• Verification: Resolvers (UAVs) must strictly validate that the signature on the fetched JSON document matches the public key declared in the DID's verificationMethod.
 
-### 6.2 Correlation Risks (Revised)
+### 6.2 Binding Integrity
 
-- The DID (`did:drop:<AppID>:<MissionID>`) and HRAL alias mappings are public.
-- The CID (the pointer) is publicly stored on the Algorand ledger, but is non-PII.
-- The coordinates remain secure because their usage is strictly tied to the cryptographic integrity verification of the Mission Plan DID Document and the Mission Authorization Token before a mission is executed.
+A critical security consideration is the binding between the on-chain pointer and the off-chain payload.
+• Immutable Linking: Because the Algorand Box stores the CID (Content Identifier), and CIDs are cryptographic hashes of the content, the off-chain data cannot be tampered with without changing the CID.
+• Anti-Spoofing: If an attacker uploads a malicious document to IPFS, they generate a new CID. Unless they also possess the Algorand Transaction Key to update the Box storage, the Resolver will simply ignore the malicious file as it does not match the authorized on-chain pointer.
+
+### 6.3 Mission Authorization Token (MAT) Security
+The MAT protocol prevents replay attacks and unauthorized usage of valid DIDs.
+• Replay Protection: The MAT must rely on a zero-value transaction or logic signature that includes a current block round or timestamp. Resolvers must reject MATs that are outside a valid time window to prevent old authorizations from being reused.
+
+## 7. Privacy Considerations
+
+### 7.1 Public Data Availability vs. Confidentiality
+Controllers must distinguish between availability and confidentiality.
+• Public Storage: Data stored on decentralized networks (IPFS/Arweave) is globally accessible and immutable. Even if the Algorand Box pointer is deleted, the historical data remains on the storage network.
+• Plaintext Warning: This specification currently describes the missionEndpoint coordinates as plaintext. Consequently, any party that resolves the DID and fetches the CID can view the landing coordinates.
+• Recommendation: If the mission parameters (e.g., specific customer location) are sensitive PII (Personally Identifiable Information), the Controller MUST encrypt the payload within the missionEndpoint object. In this scenario, the DID Document contains ciphertext, and only the authorized UAV holding the corresponding decryption key can read the coordinates.
+
+### 7.2 Correlation and Tracking
+• Ledger Correlation: The Algorand blockchain is a public ledger. Patterns of updates to specific MissionIDs can be correlated to track the frequency of deliveries by a specific Controller.
+• Identifier Persistence: The mission-id is a persistent identifier. To preserve privacy between distinct missions, Controllers are encouraged to generate unique MissionIDs (UUIDs) for every new order rather than reusing IDs, preventing external observers from building a history of a specific "slot" or "box."
+
+### 7.3 GDPR and Right to be Forgotten
+• Ledger Data: The did:drop method stores no PII on the ledger, only random identifiers and CIDs.
+• Off-Chain Data: Because IPFS/Arweave may not support deletion, Controllers must ensure that no immutable PII is embedded in the DID Document. If PII is required, it should be stored in a private, off-chain database referenced by the DID, rather than in the DID Document itself.
 
 ---
